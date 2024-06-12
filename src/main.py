@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from os import get_terminal_size
 from time import time, sleep
 
@@ -54,7 +55,7 @@ class Tester:
         if symbol == "\x7f":
             if self.index != 0:
                 self.correct -= (self.prev.pop() == (Fore.LIGHTGREEN_EX +
-                                                     self.text[self.index] +
+                                                     self.text[self.index - 1] +
                                                      Style.RESET_ALL))
             self.index = max(0, self.index - 1)
             return
@@ -79,4 +80,11 @@ class Tester:
 
 
 if __name__ == "__main__":
-    Tester(words=3).start()
+    parser = ArgumentParser(prog="Speed-Typing", description="Test your speed of typing just in your terminal!")
+    parser.add_argument("-w", "--words", metavar="N", default=200, type=int, help="Count of words (Default - 200).")
+    parser.add_argument("-o", "--offset", metavar="N", type=int,
+                        help="Maximum offset from the cursor to the edges of the terminal (Default - half the length of the terminal).")
+    parser.add_argument("-t", "--time", metavar="seconds", dest="timer", default=60, type=int,
+                        help="Time to pass the test (In seconds, default - 60s).")
+
+    Tester(**parser.parse_args().__dict__).start()
