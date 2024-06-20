@@ -2,6 +2,8 @@
 
 **An application to test your typing speed in your terminal.** Clear functionality, nothing extra, just you and the terminal.
 
+https://github.com/DanieloM83/Speed-Typing/assets/99620284/87721a2e-4775-4897-9451-3006152fc63d
+
 ## Usage
 
 To try this program, follow the steps below:
