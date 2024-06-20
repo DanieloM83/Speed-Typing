@@ -6,15 +6,16 @@ from colorama import Fore, Style, init
 from getch import getch
 
 import logger as Log
-from text import EnglishFile
+from text import FileManager, CWD
 
 init(autoreset=False)
 
 
 class Tester:
-    def __init__(self, words: int = 200, offset: int = 0, timer: int = 60):
-        self.text = EnglishFile.get_text(words)
+    def __init__(self, words: int = 200, offset: int = 0, timer: int = 60, source_name: str = "english.txt"):
+        self.text = FileManager(CWD / source_name).get_text(words)
         self.size = len(self.text)
+        self.start_time = 0
         self.words = words
         self.timer = timer
         self.correct = 0
@@ -32,16 +33,21 @@ class Tester:
         Log.info("Words count:", self.words)
         Log.info("Timer: {:.2f}s".format(self.timer) if self.timer else "Unlimited time.")
         sleep(1)
-        start_time = 0
+
+        self._exam()
+        self._end()
+
+    def _exam(self):
         while self.index < self.size:
             print(f"\r{self.offset * 2 * ' '}\r" + self.underlay(), end="\r")
             print(self.overlay(), end="")
             self.check(getch())
-            start_time = start_time or time()
-            if self.timer and time() - start_time >= self.timer: break
+            self.start_time = self.start_time or time()
+            if self.timer and time() - self.start_time >= self.timer: break
 
+    def _end(self):
         print("\r" + self.offset * 2 * " ", end="\r")
-        delta_time = min(time() - start_time, self.timer)
+        delta_time = min(time() - self.start_time, self.timer)
         accurate = self.correct * 100 / self.index
 
         Log.info("Test ended!")
@@ -86,5 +92,7 @@ if __name__ == "__main__":
                         help="Maximum offset from the cursor to the edges of the terminal (Default - half the length of the terminal).")
     parser.add_argument("-t", "--time", metavar="seconds", dest="timer", default=60, type=int,
                         help="Time to pass the test (In seconds, default - 60s).")
+    parser.add_argument("-s", "--source", metavar="filename", dest="source_name", default="english.txt", type=str,
+                        help="Name of the source file stored in the `samples` folder. (Default - 'english.txt')")
 
     Tester(**parser.parse_args().__dict__).start()

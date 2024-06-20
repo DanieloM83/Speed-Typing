@@ -5,9 +5,9 @@ CWD = Path.cwd() / "samples"
 
 
 class FileManager:
-    def __init__(self, filepath: str, filesize: int):
+    def __init__(self, filepath: Path, filesize: int = 0):
         self.filename = filepath
-        self.filesize = filesize
+        self.filesize = filesize if filesize else filepath.stat().st_size
 
     def get_text(self, words_count: int) -> str:
         words = ""
@@ -20,14 +20,10 @@ class FileManager:
         word = ""
 
         with open(self.filename, mode="r", encoding="utf-8") as file:
-            file.seek(random.randint(0, self.filesize - 50))
+            file.seek(random.randint(0, self.filesize - 5))
             while file.read(1) != "\n":
                 pass
-            while (c := file.read(1)) != "\n" and len(word) < 49:
+            while (c := file.read(1)) != "\n" and file.tell() != self.filesize:
                 word += c
 
         return word.strip()
-
-
-eng_path = CWD / "english.txt"
-EnglishFile = FileManager(str(eng_path), eng_path.stat().st_size)
