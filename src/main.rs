@@ -1,6 +1,7 @@
 mod app;
-use app::App;
+mod widgets;
 
+use app::App;
 use std::io;
 
 fn main() -> io::Result<()> {
