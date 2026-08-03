@@ -4,6 +4,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Style, Stylize},
+    text::Line,
     widgets::{Block, Widget},
 };
 
@@ -24,6 +25,13 @@ enum Focus {
     Mode,
     Value,
 }
+
+#[derive(Debug, PartialEq, Eq)]
+enum State {
+    Idle,
+    Game,
+}
+
 impl Focus {
     fn next(self) -> Self {
         match self {
@@ -48,6 +56,7 @@ impl Focus {
 pub struct App {
     is_running: bool,
     focus: Focus,
+    state: State,
 
     extra_box: CheckboxGroup,
     mode_box: RadioGroup,
@@ -97,12 +106,20 @@ impl App {
 
     fn handle_key_event(&mut self, event: KeyEvent) {
         match event.code {
-            KeyCode::Tab => {
+            KeyCode::Tab if self.state == State::Idle => {
                 self.set_focus(self.focus.next());
                 return;
             }
-            KeyCode::BackTab => {
+            KeyCode::BackTab if self.state == State::Idle => {
                 self.set_focus(self.focus.prev());
+                return;
+            }
+            KeyCode::Esc if self.state == State::Idle && self.focus == Focus::Main => {
+                self.exit();
+                return;
+            }
+            KeyCode::Esc if self.state == State::Idle && self.focus != Focus::Main => {
+                self.set_focus(Focus::Main);
                 return;
             }
             _ => {}
@@ -118,7 +135,7 @@ impl App {
             Focus::Value => {
                 self.value_box.handle_key_event(event);
             }
-            _ => {}
+            Focus::Main => {}
         };
     }
 
@@ -129,6 +146,10 @@ impl App {
 
         self.focus = focus;
     }
+
+    pub fn exit(&mut self) {
+        self.is_running = false;
+    }
 }
 
 impl Default for App {
@@ -136,6 +157,7 @@ impl Default for App {
         Self {
             is_running: true,
             focus: Focus::Main,
+            state: State::Idle,
 
             extra_box: CheckboxGroup::new(vec!["punctuation".to_string(), "numbers".to_string()]),
             mode_box: RadioGroup::new(vec!["time".to_string(), "words".to_string()]),
@@ -151,12 +173,61 @@ impl Default for App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let instructions = match self.focus {
+            Focus::Main if self.state == State::Idle => Line::from(vec![
+                " Navigate ".white(),
+                "<Tab> ".blue(),
+                " Exit ".white(),
+                "<Esc> ".blue(),
+                " Start typing to test your speed ".white(),
+            ]),
+            Focus::Main if self.state == State::Game => Line::from(vec![
+                " Navigate ".white(),
+                "<Tab> ".dark_gray(),
+                " Stop ".white(),
+                "<Esc> ".blue(),
+            ]),
+            Focus::Extra => Line::from(vec![
+                " Navigate ".white(),
+                "<Tab> ".blue(),
+                " Select ".white(),
+                "<⇆> ".blue(),
+                " Check/Uncheck ".white(),
+                "<Enter> ".blue(),
+                " Discard ".white(),
+                "<Esc> ".blue(),
+            ]),
+            Focus::Mode => Line::from(vec![
+                " Navigate ".white(),
+                "<Tab> ".blue(),
+                " Select ".white(),
+                "<⇆> ".blue(),
+                " Confirm ".white(),
+                "<Enter> ".blue(),
+                " Discard ".white(),
+                "<Esc> ".blue(),
+            ]),
+            Focus::Value => Line::from(vec![
+                " Navigate ".white(),
+                "<Tab> ".blue(),
+                " Select ".white(),
+                "<⇆> ".blue(),
+                " Confirm ".white(),
+                "<Enter> ".blue(),
+                " Discard ".white(),
+                "<Esc> ".blue(),
+            ]),
+            _ => Line::from(""),
+        };
+
         let block = Block::bordered()
-            .title(" Speed Typing ".red())
+            .title(" Speed Typing ".red().bold())
+            .title_bottom(instructions.centered())
+            .style(Style::default().on_black())
             .border_style(if self.focus == Focus::Main {
-                Style::default().yellow()
+                Style::default().red().on_black()
             } else {
-                Style::default()
+                Style::default().on_black()
             });
         let inner = block.inner(area);
 

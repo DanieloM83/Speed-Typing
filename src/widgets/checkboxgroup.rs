@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::Style,
+    style::{Style, Stylize},
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
 };
@@ -57,8 +57,8 @@ impl CheckboxGroup {
 
     pub fn handle_key_event(&mut self, event: KeyEvent) -> CheckboxGroupAction {
         match event.code {
-            KeyCode::Up | KeyCode::Left => self.move_cursor(-1),
-            KeyCode::Down | KeyCode::Right => self.move_cursor(1),
+            KeyCode::Left => self.move_cursor(-1),
+            KeyCode::Right => self.move_cursor(1),
             KeyCode::Enter => self.toggle(),
             KeyCode::Esc => self.discard(),
             _ => CheckboxGroupAction::None,
@@ -68,12 +68,12 @@ impl CheckboxGroup {
     pub fn render(&self, area: Rect, buf: &mut Buffer, focused: bool) {
         let checked_style = Style::default().yellow().on_black().bold();
         let cursor_style = if focused {
-            Style::default().italic()
+            Style::default().underlined()
         } else {
             Style::default()
         };
         let border_style = if focused {
-            Style::default().yellow()
+            Style::default().red()
         } else {
             Style::default().white()
         };
@@ -94,7 +94,11 @@ impl CheckboxGroup {
 
             spans.push(Span::styled(item.clone(), style));
             if i < self.items.len() - 1 {
-                spans.push(Span::raw(separator));
+                spans.push(if focused {
+                    separator.red()
+                } else {
+                    separator.white()
+                });
             }
         }
 
