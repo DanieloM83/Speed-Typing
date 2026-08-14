@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::widgets::{CheckboxGroup, RadioGroup};
+use crate::widgets::{CheckboxGroup, Game, RadioGroup};
 
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS);
@@ -25,13 +25,6 @@ enum Focus {
     Mode,
     Value,
 }
-
-#[derive(Debug, PartialEq, Eq)]
-enum State {
-    Idle,
-    Game,
-}
-
 impl Focus {
     fn next(self) -> Self {
         match self {
@@ -52,6 +45,12 @@ impl Focus {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum State {
+    Idle,
+    Game,
+}
+
 #[derive(Debug)]
 pub struct App {
     is_running: bool,
@@ -61,6 +60,7 @@ pub struct App {
     extra_box: CheckboxGroup,
     mode_box: RadioGroup,
     value_box: RadioGroup,
+    game: Game,
 }
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -88,7 +88,8 @@ impl App {
         frame.render_widget(self, frame.area())
     }
 
-    fn update(&self, dt: f32) -> io::Result<()> {
+    fn update(&mut self, dt: f32) -> io::Result<()> {
+        self.game.update(dt);
         Ok(())
     }
 
@@ -118,6 +119,11 @@ impl App {
                 self.exit();
                 return;
             }
+            KeyCode::Esc if self.state == State::Game && self.focus == Focus::Main => {
+                self.state = State::Idle;
+                self.game.reset();
+                return;
+            }
             KeyCode::Esc if self.state == State::Idle && self.focus != Focus::Main => {
                 self.set_focus(Focus::Main);
                 return;
@@ -135,7 +141,15 @@ impl App {
             Focus::Value => {
                 self.value_box.handle_key_event(event);
             }
-            Focus::Main => {}
+            Focus::Main if self.state == State::Idle => {
+                self.state = State::Game;
+                self.game.start();
+                self.game.handle_key_event(event);
+            }
+            Focus::Main if self.state == State::Game => {
+                self.game.handle_key_event(event);
+            }
+            _ => {}
         };
     }
 
@@ -167,6 +181,7 @@ impl Default for App {
                 "45".to_string(),
                 "60".to_string(),
             ]),
+            game: Game::new(),
         }
     }
 }
@@ -251,5 +266,7 @@ impl Widget for &App {
         self.mode_box.render(center, buf, self.focus == Focus::Mode);
         self.value_box
             .render(right, buf, self.focus == Focus::Value);
+
+        self.game.render(body, buf, false);
     }
 }
