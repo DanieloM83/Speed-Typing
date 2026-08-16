@@ -88,8 +88,7 @@ impl Game {
         let n = self.last_word.chars().count();
         let current_word = self.target_text.get(self.user_input.len()).unwrap();
 
-        if current_word.chars().nth(n) == Some(ch) {
-        } else {
+        if current_word.chars().nth(n) != Some(ch) {
             self.statistics.errors += 1;
         }
 
@@ -111,18 +110,18 @@ impl Game {
     }
 
     fn process_backspace(&mut self) {
-        // Current word is still being typed
+        // Current word isn't empty - pop char
         if self.last_word.pop().is_some() {
             return;
         }
 
-        // Previous word is correct - block action
+        // Previous word is correct - do nothing
         let n = self.user_input.len().saturating_sub(1);
         if self.user_input.last() == self.target_text.get(n) {
             return;
         }
 
-        // Previous word is incorrect - allow editing
+        // Previous word is incorrect - edit
         if let Some(word) = self.user_input.pop() {
             self.last_word = word;
         }
@@ -193,9 +192,9 @@ impl Game {
             Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(header);
 
-        let width = body.width as usize;
+        let body_width = body.width as usize;
+        let mut current_width: usize = 0;
         let mut current_line: usize = 0;
-        let mut current_width = 0;
 
         let mut text = Line::from("");
 
@@ -211,28 +210,19 @@ impl Game {
             let cursor = i == self.user_input.len();
             let rendered = self.render_word(target_word, user_word, cursor);
 
-            let word_width = UnicodeWidthStr::width(target_word.as_str())
-                .max(UnicodeWidthStr::width(user_word.unwrap_or("")));
+            if i <= self.user_input.len() {
+                let word_width = rendered.len();
 
-            let required_width = if current_width == 0 {
-                word_width
-            } else if cursor {
-                current_width + 2 + word_width
-            } else {
-                current_width + 1 + word_width
-            };
+                if current_width + word_width > body_width {
+                    current_line += 1;
+                    current_width = 0;
+                }
 
-            if required_width > width && i <= self.user_input.len() {
-                current_width = 0;
-                current_line += 1;
+                current_width += word_width + 1;
             }
 
-            current_width += word_width;
-            if current_width > 0 {
-                text.push_span(" ");
-                current_width += 1;
-            }
             text.extend(rendered);
+            text.push_span(" ");
         }
 
         let offset = current_line.saturating_sub(1);
@@ -254,11 +244,6 @@ impl Game {
         ])
         .render(stats_container, buf);
 
-        Line::from(vec![
-            body.width.to_span(),
-            " ".into(),
-            current_line.to_span(),
-        ])
-        .render(counter_container, buf);
+        Line::from(vec![self.statistics.time.round().to_span()]).render(counter_container, buf);
     }
 }
