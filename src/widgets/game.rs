@@ -1,24 +1,12 @@
-use std::{thread::current, time::Instant};
-
-use color_eyre::owo_colors::colors::css::FloralWhite;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span, ToSpan},
-    widgets::{Block, Padding, Paragraph, Widget, Wrap},
+    widgets::{Paragraph, Widget, Wrap},
 };
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-#[derive(Debug)]
-pub enum GameAction {
-    None,
-    CharTyped(char),
-    Backspace,
-    Finished,
-    Reset,
-}
 #[derive(Debug, Default)]
 pub struct GameStatistics {
     wpm: f32,
@@ -33,42 +21,34 @@ pub struct GameStatistics {
 
 #[derive(Debug)]
 pub struct Game {
-    target_text: Vec<String>,
-    user_input: Vec<String>,
-    last_word: String,
-    start_time: Option<Instant>,
-
-    rendered_user_words: Vec<Span<'static>>,
-    rendered_target_words: Vec<Span<'static>>,
+    target_words: Vec<String>,
+    completed_words: Vec<String>,
+    current_word: String,
 
     statistics: GameStatistics,
 }
+
+const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas convallis magna vel turpis lobortis bibendum. Aenean consequat nisl ac augue lobortis ullamcorper. Cras elementum urna ut molestie venenatis. Mauris est eros, ullamcorper malesuada nulla sed, iaculis ultricies ligula. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Mauris egestas urna a mi pulvinar eleifend a ut eros. Vivamus in malesuada massa. Vestibulum pharetra arcu non enim dapibus, consectetur blandit eros posuere. Praesent imperdiet felis quis felis blandit posuere.";
+
 impl Game {
     pub fn new() -> Self {
-        let target_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas convallis magna vel turpis lobortis bibendum. Aenean consequat nisl ac augue lobortis ullamcorper. Cras elementum urna ut molestie venenatis. Mauris est eros, ullamcorper malesuada nulla sed, iaculis ultricies ligula. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Mauris egestas urna a mi pulvinar eleifend a ut eros. Vivamus in malesuada massa. Vestibulum pharetra arcu non enim dapibus, consectetur blandit eros posuere. Praesent imperdiet felis quis felis blandit posuere.";
         Self {
-            target_text: target_text.split(" ").map(|s| s.to_string()).collect(),
-            user_input: Vec::new(),
-            last_word: "".to_string(),
-            start_time: None,
-
-            rendered_user_words: Vec::new(),
-            rendered_target_words: target_text.split(" ").map(|s| s.dark_gray()).collect(),
+            target_words: TEXT.split(' ').map(str::to_string).collect(),
+            completed_words: Vec::new(),
+            current_word: String::new(),
 
             statistics: GameStatistics::default(),
         }
     }
 
     pub fn reset(&mut self) {
-        self.target_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas convallis magna vel turpis lobortis bibendum. Aenean consequat nisl ac augue lobortis ullamcorper. Cras elementum urna ut molestie venenatis. Mauris est eros, ullamcorper malesuada nulla sed, iaculis ultricies ligula. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Mauris egestas urna a mi pulvinar eleifend a ut eros. Vivamus in malesuada massa. Vestibulum pharetra arcu non enim dapibus, consectetur blandit eros posuere. Praesent imperdiet felis quis felis blandit posuere.".split(" ").map(|s| s.to_string()).collect();
-        self.user_input = Vec::new();
-        self.last_word = "".to_string();
-        self.start_time = None;
+        self.target_words = TEXT.split(' ').map(str::to_string).collect();
+        self.completed_words = Vec::new();
+        self.current_word = String::new();
         self.statistics.time = 0.0;
     }
 
     pub fn start(&mut self) {
-        self.start_time = Some(Instant::now());
         self.statistics.time = 0.0;
     }
 
@@ -76,107 +56,144 @@ impl Game {
         self.statistics.time += dt;
     }
 
-    pub fn calculate_stats(&mut self) {
-        self.statistics.wpm = (self.statistics.words as f32) / (self.statistics.time / 60.0);
-        self.statistics.cpm = (self.statistics.chars as f32) / (self.statistics.time / 60.0);
-        self.statistics.acc = (self.statistics.chars as f32
-            / (self.statistics.chars + self.statistics.errors) as f32)
-            * 100.0;
+    /// The word the player is expected to be typing right now, if any.
+    /// `None` once every target word has been completed.
+    fn expected_word(&self) -> Option<&str> {
+        self.target_words
+            .get(self.completed_words.len())
+            .map(String::as_str)
+    }
+
+    /// Whether every target word has been typed and submitted.
+    pub fn is_finished(&self) -> bool {
+        self.completed_words.len() >= self.target_words.len()
+    }
+
+    fn calculate_stats(&mut self) {
+        if self.statistics.time <= 0.0 {
+            return;
+        }
+
+        let minutes = self.statistics.time / 60.0;
+        self.statistics.wpm = self.statistics.words as f32 / minutes;
+        self.statistics.cpm = self.statistics.chars as f32 / minutes;
+
+        let attempted_chars = self.statistics.chars + self.statistics.errors;
+        self.statistics.acc = if attempted_chars == 0 {
+            0.0
+        } else {
+            (self.statistics.chars as f32 / attempted_chars as f32) * 100.0
+        };
     }
 
     fn process_char(&mut self, ch: char) {
-        let n = self.last_word.chars().count();
-        let current_word = self.target_text.get(self.user_input.len()).unwrap();
+        let Some(expected_word) = self.expected_word() else {
+            return;
+        };
 
-        if current_word.chars().nth(n) != Some(ch) {
+        let typed_index = self.current_word.chars().count();
+        if expected_word.chars().nth(typed_index) != Some(ch) {
             self.statistics.errors += 1;
         }
 
-        self.last_word.push(ch);
+        self.current_word.push(ch);
     }
 
     fn process_space(&mut self) {
-        if self.last_word.is_empty() {
+        if self.current_word.is_empty() {
             return;
         }
 
-        if self.last_word == *self.target_text.get(self.user_input.len()).unwrap() {
+        if Some(self.current_word.as_str()) == self.expected_word() {
             self.statistics.words += 1;
-            self.statistics.chars += self.last_word.chars().count();
+            self.statistics.chars += self.current_word.chars().count();
         }
 
-        self.user_input.push(std::mem::take(&mut self.last_word));
-        self.calculate_stats()
+        self.completed_words
+            .push(std::mem::take(&mut self.current_word));
+        self.calculate_stats();
     }
 
     fn process_backspace(&mut self) {
-        // Current word isn't empty - pop char
-        if self.last_word.pop().is_some() {
+        // Still editing the current word - pop a char.
+        if self.current_word.pop().is_some() {
             return;
         }
 
-        // Previous word is correct - do nothing
-        let n = self.user_input.len().saturating_sub(1);
-        if self.user_input.last() == self.target_text.get(n) {
+        // Nothing to un-submit.
+        let Some(last_completed) = self.completed_words.last() else {
+            return;
+        };
+
+        // Last submitted word was correct - leave it alone, don't reopen it.
+        let last_index = self.completed_words.len() - 1;
+        if Some(last_completed.as_str()) == self.target_words.get(last_index).map(String::as_str) {
             return;
         }
 
-        // Previous word is incorrect - edit
-        if let Some(word) = self.user_input.pop() {
-            self.last_word = word;
-        }
+        // Last submitted word was wrong - reopen it for editing.
+        self.current_word = self.completed_words.pop().unwrap();
     }
 
     pub fn handle_key_event(&mut self, event: KeyEvent) {
+        if self.is_finished() {
+            return;
+        }
+
         match event.code {
-            KeyCode::Char(ch) if ch != ' ' => self.process_char(ch),
             KeyCode::Char(' ') => self.process_space(),
+            KeyCode::Char(ch) => self.process_char(ch),
             KeyCode::Backspace => self.process_backspace(),
             _ => {}
         }
     }
 
-    fn render_word(&self, target: &str, user: Option<&str>, cursor: bool) -> Vec<Span<'static>> {
-        if user.is_none() {
-            let mut rendered = Vec::new();
-            for ch in target.chars() {
-                rendered.push(ch.dark_gray());
-            }
-            return rendered;
-        }
+    /// Renders a single target word alongside what the player typed for it.
+    /// `is_current` marks the word the cursor is currently sitting in.
+    fn render_word(
+        &self,
+        target: &str,
+        typed: Option<&str>,
+        is_current: bool,
+    ) -> Vec<Span<'static>> {
+        let Some(typed) = typed else {
+            return target.chars().map(|c| c.dark_gray()).collect();
+        };
 
-        let target: Vec<char> = target.chars().collect();
-        let user: Vec<char> = user.unwrap_or("").chars().collect();
-
-        let mut rendered = Vec::new();
-
-        let cursor_pos = user.len();
-        let n = target.len().max(user.len());
+        let target_chars: Vec<char> = target.chars().collect();
+        let typed_chars: Vec<char> = typed.chars().collect();
+        let is_wrong = target_chars != typed_chars;
 
         let mut correct_style = Style::new().green();
         let mut wrong_style = Style::new().red();
         let mut skipped_style = Style::new().dark_gray();
-        let mut over_style = Style::new().light_red();
+        let mut extra_style = Style::new().light_red();
 
-        if target != user && !cursor {
+        // A completed, incorrect word gets a red background to stand out
+        // once the cursor has moved past it.
+        if is_wrong && !is_current {
             correct_style = correct_style.on_red();
             wrong_style = wrong_style.on_red();
             skipped_style = skipped_style.on_red();
-            over_style = over_style.on_red();
+            extra_style = extra_style.on_red();
         }
 
-        for i in 0..=n {
-            if cursor && i == cursor_pos {
+        let max_len = target_chars.len().max(typed_chars.len());
+        let cursor_position = typed_chars.len();
+
+        let mut rendered = Vec::new();
+        for i in 0..=max_len {
+            if is_current && i == cursor_position {
                 rendered.push("|".yellow());
             }
 
-            match (target.get(i), user.get(i)) {
+            match (target_chars.get(i), typed_chars.get(i)) {
                 (Some(t), Some(u)) if t == u => {
                     rendered.push(Span::styled(t.to_string(), correct_style))
                 }
                 (Some(t), Some(_)) => rendered.push(Span::styled(t.to_string(), wrong_style)),
                 (Some(t), None) => rendered.push(Span::styled(t.to_string(), skipped_style)),
-                (None, Some(u)) => rendered.push(Span::styled(u.to_string(), over_style)),
+                (None, Some(u)) => rendered.push(Span::styled(u.to_string(), extra_style)),
                 (None, None) => {}
             }
         }
@@ -184,7 +201,25 @@ impl Game {
         rendered
     }
 
-    pub fn render(&self, area: Rect, buf: &mut Buffer, focused: bool) {
+    fn render_stats(&self, area: Rect, buf: &mut Buffer) {
+        Line::from(vec![
+            "WPM: ".yellow().bold(),
+            self.statistics.wpm.round().to_span(),
+            "   ".to_span(),
+            "CPM: ".yellow().bold(),
+            self.statistics.cpm.round().to_span(),
+            "   ".to_span(),
+            "ACC: ".yellow().bold(),
+            self.statistics.acc.round().to_span(),
+        ])
+        .render(area, buf);
+    }
+
+    fn render_timer(&self, area: Rect, buf: &mut Buffer) {
+        Line::from(vec![self.statistics.time.round().to_span()]).render(area, buf);
+    }
+
+    pub fn render(&self, area: Rect, buf: &mut Buffer) {
         let [header, body] = Layout::vertical([Constraint::Length(1), Constraint::Length(3)])
             .areas(area.inner(Margin::new(6, 0)));
 
@@ -198,19 +233,19 @@ impl Game {
 
         let mut text = Line::from("");
 
-        for (i, target_word) in self.target_text.iter().enumerate() {
-            let user_word = if i < self.user_input.len() {
-                Some(self.user_input[i].as_str())
-            } else if i == self.user_input.len() {
-                Some(self.last_word.as_str())
+        for (i, target_word) in self.target_words.iter().enumerate() {
+            let user_word = if i < self.completed_words.len() {
+                Some(self.completed_words[i].as_str())
+            } else if i == self.completed_words.len() {
+                Some(self.current_word.as_str())
             } else {
                 None
             };
 
-            let cursor = i == self.user_input.len();
+            let cursor = i == self.completed_words.len();
             let rendered = self.render_word(target_word, user_word, cursor);
 
-            if i <= self.user_input.len() {
+            if i <= self.completed_words.len() {
                 let word_width = rendered.len();
 
                 if current_width + word_width > body_width {
@@ -232,18 +267,7 @@ impl Game {
             .scroll((offset as u16, 0))
             .render(body, buf);
 
-        Line::from(vec![
-            "WPM: ".yellow().bold(),
-            self.statistics.wpm.round().to_span(),
-            "   ".to_span(),
-            "CPM: ".yellow().bold(),
-            self.statistics.cpm.round().to_span(),
-            "   ".to_span(),
-            "ACC: ".yellow().bold(),
-            self.statistics.acc.round().to_span(),
-        ])
-        .render(stats_container, buf);
-
-        Line::from(vec![self.statistics.time.round().to_span()]).render(counter_container, buf);
+        self.render_stats(stats_container, buf);
+        self.render_timer(counter_container, buf);
     }
 }

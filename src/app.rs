@@ -64,22 +64,20 @@ pub struct App {
 }
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        let mut last_time = Instant::now();
+        let mut last_frame = Instant::now();
 
         while self.is_running {
-            let now = Instant::now();
-            let dt = now.duration_since(last_time);
-            last_time = now;
+            let frame_start = Instant::now();
+            let dt = frame_start.duration_since(last_frame).as_secs_f32();
+            last_frame = frame_start;
 
-            let dt_secs = dt.as_secs_f32();
-
-            let timeout = FRAME_DURATION
-                .checked_sub(now.elapsed())
-                .unwrap_or_else(|| Duration::from_millis(0));
-
-            self.handle_events(timeout)?;
-            self.update(dt_secs)?;
+            self.update(dt)?;
             terminal.draw(|frame| self.draw(frame))?;
+
+            // Wait for input for whatever time remains in this frame's budget.
+            // If update+draw already ate the whole budget, this returns immediately.
+            let timeout = FRAME_DURATION.saturating_sub(frame_start.elapsed());
+            self.handle_events(timeout)?;
         }
         Ok(())
     }
@@ -106,51 +104,44 @@ impl App {
     }
 
     fn handle_key_event(&mut self, event: KeyEvent) {
-        match event.code {
-            KeyCode::Tab if self.state == State::Idle => {
+        // Handle global key events (like tab, esc, etc.)
+        match (event.code, &self.state, self.focus) {
+            (KeyCode::Tab, State::Idle, _) => {
                 self.set_focus(self.focus.next());
                 return;
             }
-            KeyCode::BackTab if self.state == State::Idle => {
+            (KeyCode::BackTab, State::Idle, _) => {
                 self.set_focus(self.focus.prev());
                 return;
             }
-            KeyCode::Esc if self.state == State::Idle && self.focus == Focus::Main => {
+            (KeyCode::Esc, State::Idle, Focus::Main) => {
                 self.exit();
                 return;
             }
-            KeyCode::Esc if self.state == State::Game && self.focus == Focus::Main => {
+            (KeyCode::Esc, State::Game, Focus::Main) => {
                 self.state = State::Idle;
                 self.game.reset();
                 return;
             }
-            KeyCode::Esc if self.state == State::Idle && self.focus != Focus::Main => {
+            (KeyCode::Esc, State::Idle, _) => {
                 self.set_focus(Focus::Main);
                 return;
             }
             _ => {}
         }
 
+        // If there weren't any global key event - pass to the child components based on the current focus
         match self.focus {
-            Focus::Extra => {
-                self.extra_box.handle_key_event(event);
-            }
-            Focus::Mode => {
-                self.mode_box.handle_key_event(event);
-            }
-            Focus::Value => {
-                self.value_box.handle_key_event(event);
-            }
+            Focus::Extra => self.extra_box.handle_key_event(event),
+            Focus::Mode => self.mode_box.handle_key_event(event),
+            Focus::Value => self.value_box.handle_key_event(event),
             Focus::Main if self.state == State::Idle => {
                 self.state = State::Game;
                 self.game.start();
                 self.game.handle_key_event(event);
             }
-            Focus::Main if self.state == State::Game => {
-                self.game.handle_key_event(event);
-            }
-            _ => {}
-        };
+            Focus::Main => self.game.handle_key_event(event),
+        }
     }
 
     fn set_focus(&mut self, focus: Focus) {
@@ -267,6 +258,6 @@ impl Widget for &App {
         self.value_box
             .render(right, buf, self.focus == Focus::Value);
 
-        self.game.render(body, buf, false);
+        self.game.render(body, buf);
     }
 }
