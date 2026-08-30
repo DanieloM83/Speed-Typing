@@ -7,6 +7,19 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum GameMode {
+    #[default]
+    Time,
+    Words,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameExtra {
+    Punctuation,
+    Numbers,
+}
+
 #[derive(Debug, Default)]
 pub struct GameStatistics {
     wpm: f32,
@@ -17,6 +30,10 @@ pub struct GameStatistics {
     errors: usize,
     words: usize,
     chars: usize,
+
+    mode: GameMode,
+    mode_value: usize,
+    extras: Vec<GameExtra>,
 }
 
 #[derive(Debug)]
@@ -25,6 +42,8 @@ pub struct Game {
     completed_words: Vec<String>,
     current_word: String,
 
+    is_running: bool,
+
     statistics: GameStatistics,
 }
 
@@ -32,12 +51,16 @@ const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mae
 
 impl Game {
     pub fn new() -> Self {
+        let mut statistics = GameStatistics::default();
+        statistics.mode_value = 15;
         Self {
             target_words: TEXT.split(' ').map(str::to_string).collect(),
             completed_words: Vec::new(),
             current_word: String::new(),
 
-            statistics: GameStatistics::default(),
+            is_running: false,
+
+            statistics: statistics,
         }
     }
 
@@ -46,14 +69,37 @@ impl Game {
         self.completed_words = Vec::new();
         self.current_word = String::new();
         self.statistics.time = 0.0;
+        self.is_running = false;
     }
 
     pub fn start(&mut self) {
         self.statistics.time = 0.0;
+        self.is_running = true;
+    }
+
+    pub fn update_settings(&mut self, extras: Vec<GameExtra>, mode: GameMode, mode_value: usize) {
+        self.statistics.extras = extras;
+        self.statistics.mode = mode;
+        self.statistics.mode_value = mode_value;
+
+        self.reset()
     }
 
     pub fn update(&mut self, dt: f32) {
+        if !self.is_running {
+            return;
+        }
+
         self.statistics.time += dt;
+
+        if self.completed_words.len() >= self.target_words.len() {
+            self.is_running = false;
+        }
+
+        self.is_running = !match self.statistics.mode {
+            GameMode::Time => self.statistics.time >= self.statistics.mode_value as f32,
+            GameMode::Words => self.completed_words.len() >= self.statistics.mode_value,
+        }
     }
 
     /// The word the player is expected to be typing right now, if any.
@@ -62,11 +108,6 @@ impl Game {
         self.target_words
             .get(self.completed_words.len())
             .map(String::as_str)
-    }
-
-    /// Whether every target word has been typed and submitted.
-    pub fn is_finished(&self) -> bool {
-        self.completed_words.len() >= self.target_words.len()
     }
 
     fn calculate_stats(&mut self) {
@@ -136,7 +177,7 @@ impl Game {
     }
 
     pub fn handle_key_event(&mut self, event: KeyEvent) {
-        if self.is_finished() {
+        if !self.is_running {
             return;
         }
 
@@ -201,7 +242,22 @@ impl Game {
         rendered
     }
 
-    fn render_stats(&self, area: Rect, buf: &mut Buffer) {
+    fn render_header(&self, area: Rect, buf: &mut Buffer) {
+        let [left, right] =
+            Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(area);
+
+        let left_value = match self.statistics.mode {
+            GameMode::Time => Span::from(
+                self.statistics
+                    .mode_value
+                    .saturating_sub(self.statistics.time as usize)
+                    .to_string(),
+            ),
+            GameMode::Words => Span::from(self.completed_words.len().to_string()),
+        };
+
+        Line::from(vec![left_value]).render(left, buf);
         Line::from(vec![
             "WPM: ".yellow().bold(),
             self.statistics.wpm.round().to_span(),
@@ -212,20 +268,12 @@ impl Game {
             "ACC: ".yellow().bold(),
             self.statistics.acc.round().to_span(),
         ])
-        .render(area, buf);
-    }
-
-    fn render_timer(&self, area: Rect, buf: &mut Buffer) {
-        Line::from(vec![self.statistics.time.round().to_span()]).render(area, buf);
+        .render(right, buf);
     }
 
     pub fn render(&self, area: Rect, buf: &mut Buffer) {
         let [header, body] = Layout::vertical([Constraint::Length(1), Constraint::Length(3)])
             .areas(area.inner(Margin::new(6, 0)));
-
-        let [counter_container, stats_container] =
-            Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-                .areas(header);
 
         let body_width = body.width as usize;
         let mut current_width: usize = 0;
@@ -267,7 +315,6 @@ impl Game {
             .scroll((offset as u16, 0))
             .render(body, buf);
 
-        self.render_stats(stats_container, buf);
-        self.render_timer(counter_container, buf);
+        self.render_header(header, buf);
     }
 }

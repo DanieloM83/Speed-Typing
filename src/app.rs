@@ -9,14 +9,29 @@ use ratatui::{
 };
 
 use std::{
+    collections::HashMap,
     io,
+    sync::LazyLock,
     time::{Duration, Instant},
 };
 
-use crate::widgets::{CheckboxGroup, Game, RadioGroup};
+use crate::widgets::{CheckboxGroup, Game, GameExtra, GameMode, RadioGroup, SelectionAction};
 
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS);
+
+static GAME_EXTRAS: LazyLock<HashMap<String, GameExtra>> = LazyLock::new(|| {
+    HashMap::from([
+        ("punctuation".to_string(), GameExtra::Punctuation),
+        ("numbers".to_string(), GameExtra::Numbers),
+    ])
+});
+static GAME_MODES: LazyLock<HashMap<String, GameMode>> = LazyLock::new(|| {
+    HashMap::from([
+        ("time".to_string(), GameMode::Time),
+        ("words".to_string(), GameMode::Words),
+    ])
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
@@ -131,17 +146,40 @@ impl App {
         }
 
         // If there weren't any global key event - pass to the child components based on the current focus
-        match self.focus {
-            Focus::Extra => self.extra_box.handle_key_event(event),
-            Focus::Mode => self.mode_box.handle_key_event(event),
-            Focus::Value => self.value_box.handle_key_event(event),
+        let action: Option<SelectionAction> = match self.focus {
+            Focus::Extra => Some(self.extra_box.handle_key_event(event)),
+            Focus::Mode => Some(self.mode_box.handle_key_event(event)),
+            Focus::Value => Some(self.value_box.handle_key_event(event)),
             Focus::Main if self.state == State::Idle => {
                 self.state = State::Game;
                 self.game.start();
                 self.game.handle_key_event(event);
+                None
             }
-            Focus::Main => self.game.handle_key_event(event),
+            Focus::Main => {
+                self.game.handle_key_event(event);
+                None
+            }
+        };
+
+        if action == Some(SelectionAction::Select) {
+            self.update_settings();
         }
+    }
+
+    fn update_settings(&mut self) {
+        let extras: Vec<GameExtra> = self
+            .extra_box
+            .checked_keys()
+            .filter_map(|key| GAME_EXTRAS.get(key))
+            .copied()
+            .collect();
+
+        self.game.update_settings(
+            extras,
+            *GAME_MODES.get(self.mode_box.selected()).unwrap(),
+            self.value_box.selected().parse::<usize>().unwrap_or(0),
+        );
     }
 
     fn set_focus(&mut self, focus: Focus) {
@@ -164,8 +202,8 @@ impl Default for App {
             focus: Focus::Main,
             state: State::Idle,
 
-            extra_box: CheckboxGroup::new(vec!["punctuation".to_string(), "numbers".to_string()]),
-            mode_box: RadioGroup::new(vec!["time".to_string(), "words".to_string()]),
+            extra_box: CheckboxGroup::new(GAME_EXTRAS.keys().cloned().collect()),
+            mode_box: RadioGroup::new(GAME_MODES.keys().cloned().collect()),
             value_box: RadioGroup::new(vec![
                 "15".to_string(),
                 "30".to_string(),

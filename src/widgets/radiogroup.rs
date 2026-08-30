@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{buffer::Buffer, layout::Rect};
 
-use super::select_group::{move_cursor, render_items};
+use super::select_group::{SelectionAction, move_cursor, render_items};
 
 #[derive(Debug)]
 pub struct RadioGroup {
@@ -20,21 +20,25 @@ impl RadioGroup {
         }
     }
 
-    pub fn discard(&mut self) {
+    pub fn discard(&mut self) -> SelectionAction {
         self.cursor = self.selected;
+        SelectionAction::Discard
     }
 
     pub fn selected(&self) -> &str {
         &self.items[self.selected]
     }
 
-    pub fn handle_key_event(&mut self, event: KeyEvent) {
+    pub fn handle_key_event(&mut self, event: KeyEvent) -> SelectionAction {
         match event.code {
             KeyCode::Left => move_cursor(&mut self.cursor, self.items.len(), -1),
             KeyCode::Right => move_cursor(&mut self.cursor, self.items.len(), 1),
-            KeyCode::Enter => self.selected = self.cursor,
+            KeyCode::Enter => {
+                self.selected = self.cursor;
+                SelectionAction::Select
+            }
             KeyCode::Esc => self.discard(),
-            _ => {}
+            _ => SelectionAction::None,
         }
     }
 

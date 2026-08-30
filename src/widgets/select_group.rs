@@ -6,12 +6,20 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionAction {
+    Select,
+    Discard,
+    Navigate,
+    None,
+}
+
 /// Moves `cursor` by `delta`, clamped to the valid index range for `len` items.
-pub(super) fn move_cursor(cursor: &mut usize, len: usize, delta: i32) {
-    if len == 0 {
-        return;
+pub(super) fn move_cursor(cursor: &mut usize, len: usize, delta: i32) -> SelectionAction {
+    if len != 0 {
+        *cursor = (*cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
     }
-    *cursor = (*cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
+    SelectionAction::Navigate
 }
 
 /// Renders a horizontal, `" | "`-separated list of items, styling each one

@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{buffer::Buffer, layout::Rect};
 
-use super::select_group::{move_cursor, render_items};
+use super::select_group::{SelectionAction, move_cursor, render_items};
 
 #[derive(Debug)]
 pub struct CheckboxGroup {
@@ -21,8 +21,9 @@ impl CheckboxGroup {
         }
     }
 
-    pub fn discard(&mut self) {
+    pub fn discard(&mut self) -> SelectionAction {
         self.cursor = 0;
+        SelectionAction::Discard
     }
 
     pub fn checked_indices(&self) -> impl Iterator<Item = usize> + '_ {
@@ -32,13 +33,20 @@ impl CheckboxGroup {
             .filter_map(|(i, &checked)| checked.then_some(i))
     }
 
-    pub fn handle_key_event(&mut self, event: KeyEvent) {
+    pub fn checked_keys(&self) -> impl Iterator<Item = &String> + '_ {
+        self.checked_indices().map(|i| &self.items[i])
+    }
+
+    pub fn handle_key_event(&mut self, event: KeyEvent) -> SelectionAction {
         match event.code {
             KeyCode::Left => move_cursor(&mut self.cursor, self.items.len(), -1),
             KeyCode::Right => move_cursor(&mut self.cursor, self.items.len(), 1),
-            KeyCode::Enter => self.checked[self.cursor] = !self.checked[self.cursor],
+            KeyCode::Enter => {
+                self.checked[self.cursor] = !self.checked[self.cursor];
+                SelectionAction::Select
+            }
             KeyCode::Esc => self.discard(),
-            _ => {}
+            _ => SelectionAction::None,
         }
     }
 
