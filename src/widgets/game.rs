@@ -7,6 +7,8 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 
+use crate::utils::generate_words;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum GameMode {
     #[default]
@@ -47,14 +49,12 @@ pub struct Game {
     statistics: GameStatistics,
 }
 
-const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas convallis magna vel turpis lobortis bibendum. Aenean consequat nisl ac augue lobortis ullamcorper. Cras elementum urna ut molestie venenatis. Mauris est eros, ullamcorper malesuada nulla sed, iaculis ultricies ligula. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Mauris egestas urna a mi pulvinar eleifend a ut eros. Vivamus in malesuada massa. Vestibulum pharetra arcu non enim dapibus, consectetur blandit eros posuere. Praesent imperdiet felis quis felis blandit posuere.";
-
 impl Game {
     pub fn new() -> Self {
         let mut statistics = GameStatistics::default();
         statistics.mode_value = 15;
         Self {
-            target_words: TEXT.split(' ').map(str::to_string).collect(),
+            target_words: generate_words(300, false, false),
             completed_words: Vec::new(),
             current_word: String::new(),
 
@@ -65,7 +65,16 @@ impl Game {
     }
 
     pub fn reset(&mut self) {
-        self.target_words = TEXT.split(' ').map(str::to_string).collect();
+        let amount_to_generate = match self.statistics.mode {
+            GameMode::Time => 300,
+            GameMode::Words => self.statistics.mode_value,
+        };
+
+        let use_punctuation = self.statistics.extras.contains(&GameExtra::Punctuation);
+        let use_numbers = self.statistics.extras.contains(&GameExtra::Numbers);
+
+        self.target_words = generate_words(amount_to_generate, use_punctuation, use_numbers);
+
         self.completed_words = Vec::new();
         self.current_word = String::new();
         self.statistics.time = 0.0;

@@ -1,4 +1,5 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use indexmap::IndexMap;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -9,7 +10,6 @@ use ratatui::{
 };
 
 use std::{
-    collections::HashMap,
     io,
     sync::LazyLock,
     time::{Duration, Instant},
@@ -20,14 +20,15 @@ use crate::widgets::{CheckboxGroup, Game, GameExtra, GameMode, RadioGroup, Selec
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS);
 
-static GAME_EXTRAS: LazyLock<HashMap<String, GameExtra>> = LazyLock::new(|| {
-    HashMap::from([
+static GAME_EXTRAS: LazyLock<IndexMap<String, GameExtra>> = LazyLock::new(|| {
+    IndexMap::from([
         ("punctuation".to_string(), GameExtra::Punctuation),
         ("numbers".to_string(), GameExtra::Numbers),
     ])
 });
-static GAME_MODES: LazyLock<HashMap<String, GameMode>> = LazyLock::new(|| {
-    HashMap::from([
+
+static GAME_MODES: LazyLock<IndexMap<String, GameMode>> = LazyLock::new(|| {
+    IndexMap::from([
         ("time".to_string(), GameMode::Time),
         ("words".to_string(), GameMode::Words),
     ])
@@ -277,12 +278,8 @@ impl Widget for &App {
 
         block.render(area, buf);
 
-        let [header, body, footer] = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Fill(1),
-            Constraint::Length(1),
-        ])
-        .areas(inner);
+        let [header, body] =
+            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(inner);
 
         let [left, center, right] = Layout::horizontal(vec![
             Constraint::Fill(1),
