@@ -60,7 +60,7 @@ impl Game {
 
             is_running: false,
 
-            statistics: statistics,
+            statistics,
         }
     }
 
@@ -101,8 +101,13 @@ impl Game {
 
         self.statistics.time += dt;
 
-        if self.completed_words.len() >= self.target_words.len() {
-            self.is_running = false;
+        if self.completed_words.len() >= self.target_words.len()
+            && self.statistics.mode == GameMode::Time
+        {
+            let use_punctuation = self.statistics.extras.contains(&GameExtra::Punctuation);
+            let use_numbers = self.statistics.extras.contains(&GameExtra::Numbers);
+            self.target_words
+                .extend(generate_words(100, use_punctuation, use_numbers))
         }
 
         self.is_running = !match self.statistics.mode {

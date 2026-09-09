@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use indexmap::IndexMap;
 use ratatui::{
     DefaultTerminal, Frame,
@@ -122,6 +122,10 @@ impl App {
     fn handle_key_event(&mut self, event: KeyEvent) {
         // Handle global key events (like tab, esc, etc.)
         match (event.code, &self.state, self.focus) {
+            (KeyCode::Char('c'), _, _) if event.modifiers == KeyModifiers::CONTROL => {
+                self.exit();
+                return;
+            }
             (KeyCode::Tab, State::Idle, _) => {
                 self.set_focus(self.focus.next());
                 return;
