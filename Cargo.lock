@@ -3,18 +3,6 @@
 version = 4
 
 [[package]]
-name = "Speed-Typing"
-version = "0.1.0"
-dependencies = [
- "color-eyre",
- "crossterm",
- "indexmap",
- "rand 0.10.2",
- "ratatui",
- "unicode-width",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1385,6 +1373,18 @@ name = "smallvec"
 version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
+
+[[package]]
+name = "speed-typing"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "crossterm",
+ "indexmap",
+ "rand 0.10.2",
+ "ratatui",
+ "unicode-width",
+]
 
 [[package]]
 name = "static_assertions"

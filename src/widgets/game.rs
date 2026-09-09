@@ -22,7 +22,7 @@ pub enum GameExtra {
     Numbers,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GameStatistics {
     wpm: f32,
     cpm: f32,
@@ -38,6 +38,24 @@ pub struct GameStatistics {
     extras: Vec<GameExtra>,
 }
 
+impl Default for GameStatistics {
+    fn default() -> Self {
+        Self {
+            mode_value: 15,
+
+            wpm: f32::default(),
+            cpm: f32::default(),
+            acc: f32::default(),
+            time: f32::default(),
+            errors: usize::default(),
+            words: usize::default(),
+            chars: usize::default(),
+            mode: GameMode::default(),
+            extras: Vec::default(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Game {
     target_words: Vec<String>,
@@ -51,8 +69,7 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Self {
-        let mut statistics = GameStatistics::default();
-        statistics.mode_value = 15;
+        let statistics = GameStatistics::default();
         Self {
             target_words: generate_words(300, false, false),
             completed_words: Vec::new(),
