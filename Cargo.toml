@@ -1,7 +1,12 @@
 [package]
 name = "speed-typing"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+
+description = "A terminal-based speed typing test"
+authors = ["Danylo Mamchur"]
+repository = "https://github.com/DanieloM83/Speed-Typing"
+license = "MIT"
 
 [dependencies]
 color-eyre = "0.6.5"
